@@ -1,4 +1,33 @@
 vix_indices
 ===========
 
-An implementation of the VIX Indices as documented at http://www.spindices.com/documents/methodologies/methodology-sp-vix-future-index.pdf
+An implementation of the VIX Indices as documented at 
+http://www.spindices.com/documents/methodologies/methodology-sp-vix-future-index.pdf
+
+As of Aug. 17 2014, only the S&P 500 VIX Short-Term Futures Index TR (SPVXSTR)
+is implemented. I plan on implementing other indices later, but it's not a
+priority.
+
+Please note that the cumulative error in the computation of the indices grows
+very quickly.
+
+If a given index is calculated for just a single day given the
+previous day's officially computed index level, this script's computed index 
+level for the subsequent day is very close to the official index level.
+
+
+How to use:
+
+1. Make sure you have ruby 2.1 installed.
+2. Run the download_data.rb script to download the latest VIX futures data
+   from http://cfe.cboe.com/products/historicalvix.aspx and the latest 
+   13-week Treasury Bill discount rates from Yahoo! Finance (symbol: ^IRX; 
+   see http://finance.yahoo.com/q?s=%5EIRX).
+3. Run the build_indices.rb script to compute the values of the indices from
+   inception to today.
+
+
+Notes:
+
+The data directory contains the downloaded historical VIX futures data and the
+historical 13-week Treasury Bill discount rates.
