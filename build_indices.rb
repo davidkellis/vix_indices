@@ -78,7 +78,7 @@ def most_recent_weekly_high_tbill_rate(week_end_date)
   if rate
     rate
   else
-    puts "#{date} not found, trying #{date - 7}"
+    # puts "#{date} not found, trying #{date - 7}"
     most_recent_weekly_high_tbill_rate(date - 7)
   end
 end
