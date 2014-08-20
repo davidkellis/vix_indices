@@ -44,17 +44,6 @@ end
 TreasuryBill = Struct.new(:auction_date, :issue_date, :maturity_date, :face_value, :purchase_price, :high_price, :low_price, :high_discount_rate, :low_discount_rate, :maturity_in_days)
 
 def save_13_week_treasury_bill_rate
-  # download from Yahoo!
-  # start_date = Date.new(2005, 1, 1)
-  # end_date = Today
-  # lines = ["Date,Value"]
-  # YahooFinance.get_historical_quotes("^IRX", start_date, end_date) do |row|
-  #   # each row is of the form: [date (yyyy-mm-dd), open, high, low, close, volume, adj-close]
-  #   date, open, high, low, close, volume, adj_close = *row
-  #   lines << "#{date},#{high.to_f / 100.0}"
-  # end
-  # File.write(TreasuryBillRateFilePath, lines.join("\n"))
-  
   # download from US Treasury
   url = 'http://www.treasurydirect.gov/TA_WS/securities/jqsearch?format=json&securityTypeoperator=and&filtervalue0=Bill&filtercondition0=EQUAL&filteroperator0=1&filterdatafield0=securityType&securityTermoperator=and&filtervalue1=13&filtercondition1=CONTAINS&filteroperator1=1&filterdatafield1=securityTerm&filterscount=2&groupscount=0&pagenum=0&pagesize=2000&recordstartindex=0&recordendindex=2000'
   json_string = open(url).read()

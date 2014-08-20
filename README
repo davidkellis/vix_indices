@@ -21,8 +21,8 @@ How to use:
 1. Make sure you have ruby 2.1 installed.
 2. Run the download_data.rb script to download the latest VIX futures data
    from http://cfe.cboe.com/products/historicalvix.aspx and the latest 
-   13-week Treasury Bill discount rates from Yahoo! Finance (symbol: ^IRX; 
-   see http://finance.yahoo.com/q?s=%5EIRX).
+   13-week Treasury Bill discount rates from www.treasurydirect.gov (see
+   http://www.treasurydirect.gov/instit/annceresult/annceresult_query.htm).
 3. Run the build_indices.rb script to compute the values of the indices from
    inception to today.
 
