@@ -63,22 +63,24 @@ def lookup_tbill_rate(date)
   tbill_rates_by_date[date]
 end
 
-# returns the highest tbill rate over the course of the timeframe defined by [week_end_date - 6, date], or equivalently, (week_end_date - 7, date]
-# OR
-# returns daily high of the tbill rate on the monday at or before <week_end_date>
+# returns the tbill rate on the monday at or before <week_end_date>
 def most_recent_weekly_high_tbill_rate(week_end_date)
-  # implementation #1 - highest tbill rate over the course of the timeframe defined by [week_end_date - 6, date], or equivalently, (week_end_date - 7, date]
-  # start_date = week_end_date - 6
-  # date_series_inclusive(start_date, week_end_date).map {|date| lookup_tbill_rate(date) }.compact.max
-
-  # implementation #2 - daily high of the tbill rate on the monday at or before <week_end_date>
   previous_monday = nth_weekday_at_or_before_date(1, DayOfWeek::Monday, week_end_date)
   date = if cboe_holiday?(previous_monday)
-    previous_monday - 3   # On Mondays that are bank holidays, Friday’s rates apply.
+    # On Mondays that are bank holidays, Friday’s rates apply.
+    # I believe that means the rates from the Monday prior to last Friday apply, because Treasury announces rates on Monday.
+    nth_weekday_before_date(1, DayOfWeek::Monday, previous_monday)
   else
     previous_monday
   end
-  lookup_tbill_rate(date)
+  
+  rate = lookup_tbill_rate(date)
+  if rate
+    rate
+  else
+    puts "#{date} not found, trying #{date - 7}"
+    most_recent_weekly_high_tbill_rate(date - 7)
+  end
 end
 
 # convert a string of the form "mm?/dd?/yyyy" into a Date object
