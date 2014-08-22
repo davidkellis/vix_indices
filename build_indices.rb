@@ -30,7 +30,7 @@ TBillRate = Struct.new(:date, :rate)
 Bar = Struct.new(:date, :contract_month, :open, :high, :low, :close, :settle, :change, :volume, :efp, :open_interest)
 
 def build_vix_short_term_index
-  last_day_of_vix_futures_data = lookup_bars_by_month(Today.month, Today.year).last.date
+  last_day_of_vix_futures_data = lookup_bars_by_contract_month(Today.month, Today.year).last.date
   puts "Calculating SPVXSTR from #{CalculateSPVXSTR::BaseDate.to_s} to #{last_day_of_vix_futures_data}. This may take a few minutes."
   CalculateSPVXSTR.build_table(last_day_of_vix_futures_data).each do |date_value_pair|
     date, value = *date_value_pair
@@ -142,15 +142,15 @@ def bars_by_contract_month(file_name = FuturesDataFile)
   end
 end
 
-def lookup_bars_by_month(month, year)
+def lookup_bars_by_contract_month(month, year)
   bars_by_contract_month(FuturesDataFile)[monthstamp(year, month)]
 end
 
 # ith_month is 1, 2, ...
-def lookup_vix_future_eod_bar(ith_month, date)
+def lookup_vix_future_eod_bar(ith_month, date, date_from_which_to_determine_contract_month)
   raise "ith_month must be >= 1" unless ith_month >= 1
   
-  month_offset = if date < start_date_of_roll_period(date.year, date.month)
+  month_offset = if date_from_which_to_determine_contract_month <= start_date_of_roll_period(date_from_which_to_determine_contract_month.year, date_from_which_to_determine_contract_month.month)
     # the front month contract is the one expiring at the final settlement date of this month (i.e. date.month)
     ith_month - 1
   else
@@ -158,8 +158,8 @@ def lookup_vix_future_eod_bar(ith_month, date)
     ith_month
   end
   
-  month, year = *add_months(date.month, date.year, month_offset)
-  bars = lookup_bars_by_month(month, year)
+  month, year = *add_months(date_from_which_to_determine_contract_month.month, date_from_which_to_determine_contract_month.year, month_offset)
+  bars = lookup_bars_by_contract_month(month, year)
   bar = bars.binary_search {|bar| date <=> bar.date }
   
   return nil if bar && bar.open == 0 && bar.high == 0 && bar.low == 0 && bar.close == 0 && bar.settle == 0 && bar.volume == 0 && bar.efp == 0 && bar.open_interest == 0
@@ -250,22 +250,55 @@ class CalculateSPVXSTR
     puts print_calendar(year_of_subsequent_month2, subsequent_month2, t)
     puts "t = #{t}"
     puts "t_minus_1 = prior_cboe_business_day(#{t}) = #{t_minus_1}"
+    
     puts "vix_futures_settlement_date_for_ith_month_contract(1, #{t}) = #{vix_futures_settlement_date_for_ith_month_contract(1, t)}"
     puts "vix_futures_settlement_date_for_ith_month_contract(2, #{t}) = #{vix_futures_settlement_date_for_ith_month_contract(2, t)}"
     puts "roll_period_for_date(#{t}) = #{roll_period_for_date(t).inspect}"
-    puts "lookup_vix_future_eod_bar(1, #{t}) = #{lookup_vix_future_eod_bar(1, t)}"
-    puts "lookup_vix_future_eod_bar(2, #{t}) = #{lookup_vix_future_eod_bar(2, t)}"
-    puts "dcrp(1, #{t_minus_1}) = #{dcrp(1, t_minus_1)}"
-    puts "dcrp(2, #{t_minus_1}) = #{dcrp(2, t_minus_1)}"
-    puts "dcrp(1, #{t}) = #{dcrp(1, t)}"
-    puts "dcrp(2, #{t}) = #{dcrp(2, t)}"
+    
+    puts "lookup_vix_future_eod_bar(1, #{t_minus_1}, #{t}) = #{lookup_vix_future_eod_bar(1, t_minus_1, t)}"
+    puts "lookup_vix_future_eod_bar(2, #{t_minus_1}, #{t}) = #{lookup_vix_future_eod_bar(2, t_minus_1, t)}"
+    puts "lookup_vix_future_eod_bar(1, #{t}, #{t}) = #{lookup_vix_future_eod_bar(1, t, t)}"
+    puts "lookup_vix_future_eod_bar(2, #{t}, #{t}) = #{lookup_vix_future_eod_bar(2, t, t)}"
+
+    puts "dcrp(1, #{t_minus_1}, #{t}) = #{dcrp(1, t_minus_1, t)}"
+    puts "dcrp(2, #{t_minus_1}, #{t}) = #{dcrp(2, t_minus_1, t)}"
+    puts "dcrp(1, #{t}, #{t}) = #{dcrp(1, t, t)}"
+    puts "dcrp(2, #{t}, #{t}) = #{dcrp(2, t, t)}"
+
     puts "dr(#{t_minus_1}) = #{dr(t_minus_1)}"
     puts "dt(#{t_minus_1}) = #{dt(t_minus_1)}"
     puts "dr(#{t}) = #{dr(t)}"
     puts "dt(#{t}) = #{dt(t)}"
     
-    index_level = index_tr(t_minus_1) * (1 + cdr(t) + tbr(t))
-    puts "index_tr(#{t_minus_1}) * (1 + #{cdr(t)} + #{tbr(t)}) = #{index_level}"
+    puts "cdr(#{t}):"
+    puts "num = 100 * dr(#{t_minus_1}) / dt(#{t_minus_1}) * dcrp(1, #{t}, #{t}) + 100 * (dt(#{t_minus_1}) - dr(#{t_minus_1})) / dt(#{t_minus_1}) * dcrp(2, #{t}, #{t})"
+    puts "    = 100 * #{dr(t_minus_1)} / #{dt(t_minus_1)} * #{dcrp(1, t, t)} + 100 * (#{dt(t_minus_1)} - #{dr(t_minus_1)}) / #{dt(t_minus_1)} * #{dcrp(2, t, t)}"
+    puts "    = #{100 * dr(t_minus_1) / dt(t_minus_1) * dcrp(1, t, t)         + 100 * (dt(t_minus_1) - dr(t_minus_1)) / dt(t_minus_1) * dcrp(2, t, t)}"
+    puts "den = 100 * dr(#{t_minus_1}) / dt(#{t_minus_1}) * dcrp(1, #{t_minus_1}, #{t}) + 100 * (dt(#{t_minus_1}) - dr(#{t_minus_1})) / dt(#{t_minus_1}) * dcrp(2, #{t_minus_1}, #{t})"
+    puts "    = 100 * #{dr(t_minus_1)} / #{dt(t_minus_1)} * #{dcrp(1, t_minus_1, t)} + 100 * (#{dt(t_minus_1)} - #{dr(t_minus_1)}) / #{dt(t_minus_1)} * #{dcrp(2, t_minus_1, t)}"
+    puts "    = #{100 * dr(t_minus_1) / dt(t_minus_1) * dcrp(1, t_minus_1, t) + 100 * (dt(t_minus_1) - dr(t_minus_1)) / dt(t_minus_1) * dcrp(2, t_minus_1, t)}"
+    numerator =   100 * dr(t_minus_1) / dt(t_minus_1) * dcrp(1, t, t)         + 100 * (dt(t_minus_1) - dr(t_minus_1)) / dt(t_minus_1) * dcrp(2, t, t)
+    denominator = 100 * dr(t_minus_1) / dt(t_minus_1) * dcrp(1, t_minus_1, t) + 100 * (dt(t_minus_1) - dr(t_minus_1)) / dt(t_minus_1) * dcrp(2, t_minus_1, t)
+    cdr_t = numerator / denominator - 1.0
+    puts "cdr(#{t}) = #{cdr_t}"
+
+    index_level1 = index_tr(t_minus_1) * (1 + cdr_t + tbr(t))
+    puts "index_tr(#{t_minus_1}) * (1 + #{cdr_t} + #{tbr(t)}) = #{index_level1}"
+
+    # puts "cdr(#{t}): (vance harwood)"
+    # puts "num = 100 * dr(#{t}) / dt(#{t}) * dcrp(1, #{t}) + 100 * (dt(#{t}) - dr(#{t})) / dt(#{t}) * dcrp(2, #{t})"
+    # puts "    = 100 * #{dr(t)} / #{dt(t)} * #{dcrp(1, t)} + 100 * (#{dt(t)} - #{dr(t)}) / #{dt(t)} * #{dcrp(2, t)}"
+    # puts "    = #{100 * dr(t) / dt(t) * dcrp(1, t)         + 100 * (dt(t) - dr(t)) / dt(t) * dcrp(2, t)}"
+    # puts "den = 100 * dr(#{t}) / dt(#{t}) * dcrp(1, #{t_minus_1}) + 100 * (dt(#{t}) - dr(#{t})) / dt(#{t}) * dcrp(2, #{t_minus_1})"
+    # puts "    = 100 * #{dr(t)} / #{dt(t)} * #{dcrp(1, t_minus_1)} + 100 * (#{dt(t)} - #{dr(t)}) / #{dt(t)} * #{dcrp(2, t_minus_1)}"
+    # puts "    = #{100 * dr(t) / dt(t) * dcrp(1, t_minus_1) + 100 * (dt(t) - dr(t)) / dt(t) * dcrp(2, t_minus_1)}"
+    # numerator =   100 * dr(t) / dt(t) * dcrp(1, t)         + 100 * (dt(t) - dr(t)) / dt(t) * dcrp(2, t)
+    # denominator = 100 * dr(t) / dt(t) * dcrp(1, t_minus_1) + 100 * (dt(t) - dr(t)) / dt(t) * dcrp(2, t_minus_1)
+    # cdr_t = numerator / denominator - 1.0
+    # puts "cdr(#{t}) = #{cdr_t}"
+    #
+    # index_level2 = index_tr(t_minus_1) * (1 + cdr_t + tbr(t))
+    # puts "index_tr(#{t_minus_1}) * (1 + #{cdr_t} + #{tbr(t)}) = #{index_level2}"
   end
 
   # Contract Daily Return
@@ -274,22 +307,30 @@ class CalculateSPVXSTR
 
     # attempt 1 - original equation taken from http://www.spindices.com/documents/methodologies/methodology-sp-vix-future-index.pdf
     # numerator = twdo(t, M, N)
-    # divisor = tdwi(t_minus_1, M, N)
+    # denominator = tdwi(t_minus_1, M, N)
 
     # attempt 2 - just simplified the equation to remove references to twdo and tdwi
-    numerator = crw(1, t_minus_1) * dcrp(1, t) + crw(2, t_minus_1) * dcrp(2, t)
-    divisor = crw(1, t_minus_1) * dcrp(1, t_minus_1) + crw(2, t_minus_1) * dcrp(2, t_minus_1)
+    # numerator = crw(1, t_minus_1) * dcrp(1, t) + crw(2, t_minus_1) * dcrp(2, t)
+    # denominator = crw(1, t_minus_1) * dcrp(1, t_minus_1) + crw(2, t_minus_1) * dcrp(2, t_minus_1)
+    numerator =   100 * dr(t_minus_1) / dt(t_minus_1) * dcrp(1, t, t)         + 100 * (dt(t_minus_1) - dr(t_minus_1)) / dt(t_minus_1) * dcrp(2, t, t)
+    denominator = 100 * dr(t_minus_1) / dt(t_minus_1) * dcrp(1, t_minus_1, t) + 100 * (dt(t_minus_1) - dr(t_minus_1)) / dt(t_minus_1) * dcrp(2, t_minus_1, t)
 
-    numerator / divisor - 1.0
+    # attempt 3 - these equations were provided by Vance Harwood
+    # numerator = crw(1, t) * dcrp(1, t) + crw(2, t) * dcrp(2, t)
+    # denominator = crw(1, t) * dcrp(1, t_minus_1) + crw(2, t) * dcrp(2, t_minus_1)
+    # numerator =   100 * dr(t) / dt(t) * dcrp(1, t)         + 100 * (dt(t) - dr(t)) / dt(t) * dcrp(2, t)
+    # denominator = 100 * dr(t) / dt(t) * dcrp(1, t_minus_1) + 100 * (dt(t) - dr(t)) / dt(t) * dcrp(2, t_minus_1)
+
+    numerator / denominator - 1.0
   end
 
-  def twdo(t, m, n)
-    (m..n).map {|i| crw(i, prior_cboe_business_day(t)) * dcrp(i, t) }.reduce(:+)
-  end
-
-  def tdwi(t, m, n)
-    (m..n).map {|i| crw(i, t) * dcrp(i, t) }.reduce(:+)
-  end
+  # def twdo(t, m, n)
+  #   (m..n).map {|i| crw(i, prior_cboe_business_day(t)) * dcrp(i, t, t) }.reduce(:+)
+  # end
+  #
+  # def tdwi(t, m, n)
+  #   (m..n).map {|i| crw(i, t) * dcrp(i, t, t) }.reduce(:+)
+  # end
   
   def crw(i, t)
     dt = dt(t)
@@ -305,18 +346,19 @@ class CalculateSPVXSTR
   end
   
   # i >= 1
-  def dcrp(i, t, price_extraction_fn = ->(future_eod_bar) { future_eod_bar.settle })
-    ith_bar = lookup_vix_future_eod_bar(i, t)
+  def dcrp(i, t, base_date_from_which_to_look_up_contract_month, price_extraction_fn = ->(future_eod_bar) { future_eod_bar.settle })
+    ith_bar = lookup_vix_future_eod_bar(i, t, base_date_from_which_to_look_up_contract_month)
     if ith_bar
       price_extraction_fn.call(ith_bar)
     else          # ith future not listed
       raise "The first month future is not listed, so we can't interpolate." if i == 1
       
-      ith_minus_1_bar = lookup_vix_future_eod_bar(i - 1, t)
-      ith_plus_1_bar = lookup_vix_future_eod_bar(i + 1, t)
-      ith_plus_2_bar = lookup_vix_future_eod_bar(i + 2, t)
+      ith_minus_1_bar = lookup_vix_future_eod_bar(i - 1, t, base_date_from_which_to_look_up_contract_month)
+      ith_plus_1_bar = lookup_vix_future_eod_bar(i + 1, t, base_date_from_which_to_look_up_contract_month)
+      ith_plus_2_bar = lookup_vix_future_eod_bar(i + 2, t, base_date_from_which_to_look_up_contract_month)
       
       interpolated_value = if ith_plus_1_bar && ith_minus_1_bar      # check to see if ith+1 and ith-1 futures were listed
+        puts "dcrp - interpolate1"
         dcrp_i_plus_1 = price_extraction_fn.call(ith_plus_1_bar)
         dcrp_i_minus_1 = price_extraction_fn.call(ith_minus_1_bar)
         t_i_minus_1 = vix_futures_settlement_date_for_ith_month_contract(i - 1, t)
@@ -324,6 +366,7 @@ class CalculateSPVXSTR
         t_i_plus_1 = vix_futures_settlement_date_for_ith_month_contract(i + 1, t)
         (dcrp_i_minus_1 ** 2 + (cboe_num_business_days_between(t_i_minus_1, t_i) / cboe_num_business_days_between(t_i_minus_1, t_i_plus_1)) * (dcrp_i_plus_1 ** 2 - dcrp_i_minus_1 ** 2)) ** Rational(1, 2)
       elsif ith_plus_2_bar && ith_minus_1_bar      # check to see if ith+2 and ith-1 futures were listed
+        puts "dcrp - interpolate2"
         dcrp_i_plus_2 = price_extraction_fn.call(ith_plus_2_bar)
         dcrp_i_minus_1 = price_extraction_fn.call(ith_minus_1_bar)
         t_i_minus_1 = vix_futures_settlement_date_for_ith_month_contract(i - 1, t)
@@ -331,7 +374,8 @@ class CalculateSPVXSTR
         t_i_plus_2 = vix_futures_settlement_date_for_ith_month_contract(i + 2, t)
         (dcrp_i_minus_1 ** 2 + (cboe_num_business_days_between(t_i_minus_1, t_i) / cboe_num_business_days_between(t_i_minus_1, t_i_plus_2)) * (dcrp_i_plus_2 ** 2 - dcrp_i_minus_1 ** 2)) ** Rational(1, 2)
       else
-        ith_minus_2_bar = lookup_vix_future_eod_bar(i - 2, t)
+        puts "dcrp - interpolate3"
+        ith_minus_2_bar = lookup_vix_future_eod_bar(i - 2, t, base_date_from_which_to_look_up_contract_month)
 
         raise "Can't interpolate DCRP" unless ith_minus_1_bar && ith_minus_2_bar
         
